@@ -1,16 +1,17 @@
 Package: statcheck
 Type: Package
-Title: Extract statistics from articles and recompute p values
+Title: Extract statistics from articles and recompute p values [adjusted to extract odds ratios]
 Version: 1.0.2
 Date: 2015-11-11
 Author: Sacha Epskamp <mail@sachaepskamp.com> & Michele B. Nuijten
-    <m.b.nuijten@uvt.nl>
-Maintainer: Michele B. Nuijten <m.b.nuijten@uvt.nl>
+    <m.b.nuijten@uvt.nl> & CHJ Hartgerink <chjh@protonmail.com>
+Maintainer: CHJ Hartgerink <chjh@protonmail.com>
 Depends:
     R (>= 2.14.2),
     plyr,
     ggplot2
-Description: Extract statistics from articles and recompute p values.
+    stringr
+Description: Extract genotype, snp, and odds ratios
 License: GPL-2
 LazyLoad: yes
 ByteCompile: yes
