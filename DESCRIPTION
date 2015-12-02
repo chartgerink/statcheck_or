@@ -9,7 +9,7 @@ Maintainer: CHJ Hartgerink <chjh@protonmail.com>
 Depends:
     R (>= 2.14.2),
     plyr,
-    ggplot2
+    ggplot2,
     stringr
 Description: Extract genotype, snp, and odds ratios
 License: GPL-2
