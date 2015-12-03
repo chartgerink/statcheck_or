@@ -40,24 +40,28 @@ statcheck <- function(
   x,
   contextlength = 200
 ){
-  # Create empty data frame for main result:
-  Res <- data.frame(Source = NULL,
-                    context = NULL,
-                    genotype = NULL,
-                    SNP = NULL,
-                    gene = NULL,
-                    dependent = NULL,
-                    or = NULL,
-                    ci_lb = NULL,
-                    ci_ub = NULL,
-                    pval  =  NULL,
-                    se_recalc = NULL,
-                    pval_recalc  =  NULL)
-  class(Res) <- c("statcheck","data.frame")
+  # Create empty objects
+  raw_result = NULL
+  genotype = NULL
+  snp = NULL
+  dv = NULL
+  or_comparison = NULL
+  or_result = NULL
+  ci_confidence = NULL
+  ci_lb = NULL
+  ci_ub = NULL
+  p_comparison = NULL
+  p_result  =  NULL
+  p_recalc  =  NULL
+  test_stat_recalc <- NULL
+  se_recalc = NULL
   
-  if (length(x)==0) return(Res)
+  if (length(x)==0) return(NULL)
   
   if (is.null(names(x))) names(x) <-  1:length(x)
+  
+  # create counter for loops
+  index <- 1
   
   message("Extracting statistics...")
   pb <- txtProgressBar(max=length(x),style=3)
@@ -81,15 +85,19 @@ statcheck <- function(
     locator_snp <- gregexpr("\\srs[0-9]{1,10}\\s", resContext, ignore.case = TRUE)
     
     # DV
-    locator_dv <- gregexpr("(associat[a-z]{1,2}|
-                           correlat[a-z]{1,2}|
-                           relat[a-z]{1,2})\\s(with|to)", resContext, ignore.case = TRUE)
+    locator_ass <- gregexpr("(associat[a-z]{1,}|
+                           correlat[a-z]{1,}|
+                           relat[a-z]{1,})\\s(with|to)\\s", resContext, ignore.case = TRUE)
+    
+    locator_dv <- gregexpr("(associat[a-z]{1,}|
+                           correlat[a-z]{1,}|
+                           relat[a-z]{1,})\\s(with|to)\\s[a-z]{1,}", resContext, ignore.case = TRUE)
     
     # Odds ratio
     locator_or <- gregexpr("(odds ratio.*|or.*?)[<>=]", resContext, ignore.case = TRUE)
     
     # Confidence interval
-    locator_ci <- gregexpr("[0-9]{2}\\%.*?(confidence interval.*|ci.*?)[=:;]", resContext, ignore.case = TRUE)
+    locator_ci <- gregexpr("[0-9]{2}\\%.*?(confidence interval.*|ci.*?)[=:;].*?([0-9]{1,}?[.]?[0-9]{1,}.*?[0-9]{1,}?[.]?[0-9]{1,})", resContext, ignore.case = TRUE)
     
     # P-value (if present)
     locator_p <- gregexpr("p.?[<>=]", resContext, ignore.case = TRUE)
@@ -97,82 +105,91 @@ statcheck <- function(
     for (j in 1:length(resContext)){
       # extract data from each context with use of locators
       # genotype
-      genotype_ind <- str_sub(resContext[[j]], locator_genotype[[j]] + 10 - 1, locator_genotype[[j]] + 10)
-      print(genotype_ind)
+      genotype_ind <- substr(resContext[[j]], locator_genotype[[j]] + 10 - 1, locator_genotype[[j]] + 10)
       # SNP
-      snp_ind <- str_sub(resContext[[j]], locator_snp[[j]] + 1, locator_snp[[j]] + attr(locator_snp[[j]], "match.length") - 2)
+      snp_temp <- str_match_all(resContext[[j]],
+                                "\\srs[0-9]{1,10}\\s")[[1]][1]
+      snp_ind <- gsub(pattern = "\\s", x = snp_temp, replacement = "")
       # DV
-      dv_ind <- str_sub(resContext[[j]], locator_dv[[j]] + 5 - 1, locator_snp[[j]] + attr(locator_snp[[j]], "match.length") - 1)
+      dv_ind <- gsub(pattern = "\\s",
+                     x = substr(resContext[[j]], locator_ass[[j]] + attr(locator_ass[[j]], "match.length"), locator_dv[[j]] + attr(locator_dv[[j]], "match.length")),
+                     "")
       # OR
+      or_temp <- substr(resContext[[j]], locator_or[[j]], locator_or[[j]] + attr(locator_or[[j]], "match.length") + 5)
+      or_comp <- str_match_all(or_temp,
+                               "[<>=]")[[1]][1]
+      or_ind <- as.numeric(str_match_all(or_temp,
+                              "[0-9]{1,}?[.][0-9]{1,3}")[[1]][1])
       # CI
+      ci_temp <- substr(resContext[[j]], locator_ci[[j]], locator_ci[[j]] + attr(locator_ci[[j]], "match.length") + 5)
+      ci_conf <- as.numeric(substr(str_match_all(ci_temp, "[0-9]{1,2}\\%\\s?[cC]")[[1]][,1], 0, 2))
+      ci_conc <- str_match_all(ci_temp, "[0-9]{1,}?[.][0-9]{1,3}")[[1]][,1]
+      ci_lb_ind <- as.numeric(min(ci_conc))
+      ci_ub_ind <- as.numeric(max(ci_conc))
       # P-value
+      p_temp <- substr(resContext[[j]], locator_p[[j]], locator_p[[j]] + attr(locator_p[[j]], "match.length") + 5)
+      p_comp <- str_match_all(p_temp,
+                              "[<>=]")[[1]][1]
+      p_ind <- as.numeric(str_match_all(p_temp,
+                             "[0-9]{1,}?[.][0-9]{1,3}")[[1]][1])
       
+      # recalculate p-value
+      # from Altman, D. G., & Bland, J. M. (2011). How to obtain the P value from a confidence interval. BMJ , 343, d2304.
+      se_ind <- (ci_ub_ind - ci_lb_ind) / (2 * qnorm((1 - (ci_conf / 100)) / 2, lower.tail = FALSE))
+      z_ind <- or_ind / se_ind
+      p_recalc_ind <- pnorm(z_ind, lower.tail = FALSE) * 2
+      
+      
+      # write back results into main objects
+      raw_result[index] = resContext[[j]]
+      genotype[index] = genotype_ind
+      snp[index] = snp_ind
+      dv[index] = dv_ind
+      or_comparison[index] = or_comp
+      or_result[index] = or_ind
+      ci_confidence[index] = ci_conf
+      ci_lb[index] = ci_lb_ind
+      ci_ub[index] = ci_ub_ind
+      p_comparison[index] = p_comp
+      p_result [index] =  p_ind
+      p_recalc [index] =  p_recalc_ind
+      test_stat_recalc[index] = z_ind
+      se_recalc[index] = se_ind
+      
+      index = index + 1
     }
-    
-    genotype
-    
-    locator_genotype <- gregexpr("genotype\\s[A-Za-z]{2}", txt, ignore.case = TRUE)
-    
-    # SNP
-    locator_snp <- gregexpr("SNP\\srs[0-9]{1,10}", txt, ignore.case = TRUE)
-    
-    # DV
-    locator_dv <- gregexpr("associat.*", txt, ignore.case = TRUE)
-    
-    # Odds ratio
-    locator_or <- gregexpr("(odds ratio.*|or.*?)[<>=]", txt, ignore.case = TRUE)
-    
-    # Confidence interval
-    locator_ci <- gregexpr("[0-9]{2}\\%.*?(confidence interval.*|ci.*?)[=:;]", txt, ignore.case = TRUE)
-    
-    # P-value (if present)
-    locator_p <- gregexpr("p.?[<>=]", txt, ignore.case = TRUE)
-    
-    
-      # extract data from each context with use of locators
-      # genotype
-      genotype_ind <- str_sub(txt, locator_genotype[[1]] + 10 - 1, locator_genotype[[1]] + 10)
-      print(genotype_ind)
-      
-      snp_ind <- str_sub(txt, locator_snp[[1]], locator_snp[[1]] + 20)
-      print(snp_ind)
-      # SNP
-      # DV
-      # OR
-      # CI
-      # P-value
-      
-    }
-    
-    
-    # final data frame
-    Res <- data.frame(Source = names(x),
-                      context = resContext,
-                      genotype = NULL,
-                      SNP = NULL,
-                      gene = NULL,
-                      dependent = NULL,
-                      or = NULL,
-                      ci_lb = NULL,
-                      ci_ub = NULL,
-                      pval  =  NULL,
-                      se_recalc = NULL,
-                      pval_recalc  =  NULL)
-    )
-    
-    class(Res) <- c("statcheck","data.frame")
   }
   
-  ###--------------------------------------------------------------------- 
-    # Return message when there are no results
-    if(nrow(Res)>0){
-      
-      
-      return(Res) 
-    } else {
-      Res <- cat("statcheck did not find any results\n")
-    }
-  }
+  
+  # data frame
+  Res <- data.frame(Source = names(x),
+                    raw_result = raw_result,
+                    genotype = genotype,
+                    snp = snp,
+                    dv = dv,
+                    or_comparison = or_comparison,
+                    or_result = or_result,
+                    ci_confidence = ci_confidence,
+                    ci_lb = ci_lb,
+                    ci_ub = ci_ub,
+                    p_comparison = p_comparison,
+                    p_result  = p_result,
+                    p_recalc  = p_recalc,
+                    test_stat_recalc = test_stat_recalc,
+                    se_recalc = se_recalc)
+
+class(Res) <- c("statcheck","data.frame")
+
+###--------------------------------------------------------------------- 
+# Return message when there are no results
+if(nrow(Res)>0){
+  
+  
+  return(Res) 
+} else {
+  Res <- cat("statcheck did not find any results\n")
+}
+}
 
 
 ###########################
