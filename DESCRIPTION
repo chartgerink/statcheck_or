@@ -1,4 +1,4 @@
-Package: statcheck
+Package: statcheck_or
 Type: Package
 Title: Extract statistics from articles and recompute p values [adjusted to extract odds ratios]
 Version: 1.0.2
