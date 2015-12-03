@@ -65,23 +65,25 @@ statcheck <- function(
     
     txt <- x[i]
     
-    # identify odds ratio results and extract their context in the text
-    resLoc <- gregexpr("odds ratio|or",
+    # identify sequence of results and extract their text
+    resLoc <- gregexpr("(genotype).*?rs[0-9]{1,10}.*?(associate|relate|correlate)(d)?\\s(with|to).*?(odds\\sratio|\\(?OR\\)?).*?[0-9]{2}\\%\\s(confidence\\sinterval|\\(?ci\\)?).*?(p.*?\\s?[0-9]?.[0-9]{1,5})",
                        txt,
                        ignore.case = TRUE)[[1]]
     resContext <- substring(txt,
-                            resLoc - contextlength,
-                            resLoc + contextlength)
+                            resLoc,
+                            resLoc + attr(resLoc, "match.length") + 3)
     
     # locate data in context strings
     # genotype
-    locator_genotype <- gregexpr("genotype\\s[A-Za-z]{2}", resContext, ignore.case = TRUE)
+    locator_genotype <- gregexpr("genotype.?[A-Za-z]{2}", resContext, ignore.case = TRUE)
     
     # SNP
-    locator_snp <- gregexpr("SNP\\srs[0-9]{1,10}", resContext, ignore.case = TRUE)
+    locator_snp <- gregexpr("\\srs[0-9]{1,10}\\s", resContext, ignore.case = TRUE)
     
     # DV
-    locator_dv <- gregexpr("associat.*", resContext, ignore.case = TRUE)
+    locator_dv <- gregexpr("(associat[a-z]{1,2}|
+                           correlat[a-z]{1,2}|
+                           relat[a-z]{1,2})\\s(with|to)", resContext, ignore.case = TRUE)
     
     # Odds ratio
     locator_or <- gregexpr("(odds ratio.*|or.*?)[<>=]", resContext, ignore.case = TRUE)
@@ -98,7 +100,9 @@ statcheck <- function(
       genotype_ind <- str_sub(resContext[[j]], locator_genotype[[j]] + 10 - 1, locator_genotype[[j]] + 10)
       print(genotype_ind)
       # SNP
+      snp_ind <- str_sub(resContext[[j]], locator_snp[[j]] + 1, locator_snp[[j]] + attr(locator_snp[[j]], "match.length") - 2)
       # DV
+      dv_ind <- str_sub(resContext[[j]], locator_dv[[j]] + 5 - 1, locator_snp[[j]] + attr(locator_snp[[j]], "match.length") - 1)
       # OR
       # CI
       # P-value
